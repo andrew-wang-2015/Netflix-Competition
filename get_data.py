@@ -6,29 +6,51 @@ import envoy
 import progressbar
 import os.path
 
-# Returns 2 scipy.sparse matrices, for training and probe
-def import_data(trainpath, probepath):
-    assert(os.path.isfile(trainpath))
+nusers = 7#458293
+nitems = 17770
+# Returns scipy.sparse matrices, for training and probe
+# optimized for getting individual users data
+# users are rows, movies are columns
 
+
+
+# Returns scipy.sparse matrices, for training and probe
+# optimized for getting individual movies data
+# movies are rows, users are columns
+def import_data_movie(trainpath, probepath):
+    assert(os.path.isfile(trainpath))
 
     assert(os.path.isfile(probepath))
 
-    Dtr, users, items = get_train_data(trainpath)
+    Dtr = get_train_data_movie(trainpath)
 
-    Dpr = get_probe_data(probepath,  users, items)
+    Dpr = get_probe_data_movie(probepath)
 
-    return Dtr, Dpr
+    return Dtr.tocsr(), Dpr.tocsr()
 
+
+
+
+# Returns scipy.sparse matrices, for training and probe
+# optimized for getting individual users data
+# users are rows, movies are columns
+def import_data_user(trainpath, probepath):
+    assert(os.path.isfile(trainpath))
+
+    assert(os.path.isfile(probepath))
+
+    Dtr = get_train_data_user(trainpath)
+
+    Dpr = get_probe_data_user(probepath)
+
+    return Dtr.tocsr(), Dpr.tocsr()
 
 ###############################################################################
 # Helper methods
+def get_train_data_user(filename):
 
-def get_train_data(filename):
-    users = {}
-    items = {}
-    nusers = 0
-    nitems = 0
-    include_time = False
+
+
     r = envoy.run('wc -l {}'.format(filename))
     num_lines = int(r.std_out.strip().partition(' ')[0])
     bar = progressbar.ProgressBar(maxval=num_lines, widgets=["Loading train ratings: ",
@@ -39,32 +61,70 @@ def get_train_data(filename):
                                                              ' ', progressbar.ETA()]).start()
     I, J, V = [], [], []
 
+
     with open(filename) as f:
         for i, line in enumerate(f):
 
             if (i % 1000) == 0:
                 bar.update(i % bar.maxval)
             userid, itemid, date, rating = line.split()
-            if userid not in users:
-                users[userid] = nusers
-                nusers += 1
-            if itemid not in items:
-                items[itemid] = nitems
-                nitems += 1
-            uid = users[userid]
-            iid = items[itemid]
-            I.append(uid)
-            J.append(iid)
-            V.append(float(rating))
+
+
+
+            I.append(int(userid)-1)
+            J.append(int(itemid)-1)
+            V.append(float(rating)-3) #Center around 3, by setting 3 to 0
+
     bar.finish()
 
     R = scipy.sparse.coo_matrix(
         (V, (I, J)), shape=(nusers, nitems))
-    R = R.tocsr()
-    return R, users, items
 
 
-def get_probe_data(testpath, users, items):
+
+    return R
+
+
+def get_train_data_movie(filename):
+
+
+
+    r = envoy.run('wc -l {}'.format(filename))
+    num_lines = int(r.std_out.strip().partition(' ')[0])
+    bar = progressbar.ProgressBar(maxval=num_lines, widgets=["Loading train ratings: ",
+                                                             progressbar.Bar(
+                                                                 '=', '[', ']'),
+                                                             ' ', progressbar.Percentage(),
+
+                                                             ' ', progressbar.ETA()]).start()
+    I, J, V = [], [], []
+
+
+
+    with open(filename) as f:
+        for i, line in enumerate(f):
+
+            if (i % 1000) == 0:
+                bar.update(i % bar.maxval)
+            userid, itemid, date, rating = line.split()
+
+
+
+            I.append(int(userid)-1)
+            J.append(int(itemid)-1)
+            V.append(float(rating)-3) #Center around 3, by setting 3 to 0
+
+    bar.finish()
+
+    R = scipy.sparse.coo_matrix(
+        (V, (J, I)), shape=(nitems, nusers))
+
+
+
+    return R
+
+
+def get_probe_data_user(testpath):
     r = envoy.run('wc -l {}'.format(testpath))
     num_lines = int(r.std_out.strip().partition(' ')[0])
     bar = progressbar.ProgressBar(maxval=num_lines, widgets=['Loading test ratings: ',
@@ -77,21 +137,64 @@ def get_probe_data(testpath, users, items):
 
 
     I, J, V = [], [], []
+
     with open(testpath) as fp:
         for i, line in enumerate(fp):
             if (i % 1000) == 0:
                 bar.update(i % bar.maxval)
             user, item, date, rating = line.split()
-            if user in users and item in items:
-                I.append(users[user])
-                J.append(items[item])
-                V.append(float(rating))
+
+
+            I.append(int(user)-1)
+            J.append(int(item)-1)
+            V.append(float(rating)-3) #Center around 3 by setting 3 to 0
+
+
 
     bar.finish()
     R = scipy.sparse.coo_matrix(
-        (V, (I, J)), shape=(len(users.keys()), len(items.keys())))
-    return R.tocsr()
+        (V, (I, J)), shape=(nusers, nitems))
+
+
+
+    return R
+
+
+def get_probe_data_movie(testpath):
+    r = envoy.run('wc -l {}'.format(testpath))
+    num_lines = int(r.std_out.strip().partition(' ')[0])
+    bar = progressbar.ProgressBar(maxval=num_lines, widgets=['Loading test ratings: ',
+                                                             progressbar.Bar(
+                                                                 '=', '[', ']'),
+                                                             ' ', progressbar.Percentage(),
+
+                                                             ' ', progressbar.ETA()]).start()
+
+
+
+    I, J, V = [], [], []
+
+    with open(testpath) as fp:
+        for i, line in enumerate(fp):
+            if (i % 1000) == 0:
+                bar.update(i % bar.maxval)
+            user, item, date, rating = line.split()
+
+
+            I.append(int(user)-1)
+            J.append(int(item)-1)
+            V.append(float(rating)-3) #Center around 3 by setting 3 to 0
+
+    bar.finish()
+    R = scipy.sparse.coo_matrix(
+        (V, (J, I)), shape=(nitems, nusers))
+
+    return R
+
 
 
 if __name__ == '__main__':
-    Dtr, Dpr = import_data("../mu/all.dta", "../mu/small_train.dta")
+    Dtr, Dpr = import_data_movie("../um/small_train.dta", "../um/small_train.dta")
+
+
+    print len(Dtr.indices)
