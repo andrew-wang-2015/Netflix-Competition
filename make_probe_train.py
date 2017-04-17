@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-idxFile  = 'mu/all.idx'
-dataFile = 'mu/all.dta'
+idxFile  = '../mu/all.idx'
+dataFile = '../mu/all.dta'
 
 def main():
 	indices = pd.read_csv(idxFile, delimiter=' ', header=None).values
