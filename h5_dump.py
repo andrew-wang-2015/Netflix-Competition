@@ -43,11 +43,11 @@ with open(source_filename) as f:
               I.append(int(userid)-1)
               #print I
               J.append(int(itemid)-1)
-              V.append(int(rating)-3+0.60951619727280626) # to get mean
+              V.append(int(rating)-3-0.60951619727280626) # to get mean
           elif idx == 4:
               probe_I.append(int(userid)-1)
               probe_J.append(int(itemid)-1)
-              probe_V.append(int(rating)-3+0.60951619727280626)
+              probe_V.append(int(rating)-3-0.60951619727280626)
           elif idx == 5:
               qual_I.append(int(userid)-1)
               qual_J.append(int(itemid)-1)

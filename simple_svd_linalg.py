@@ -11,7 +11,7 @@ import time
 nusers = 458293
 nitems = 17770
 
-datafile = h5py.File('../um/all.h5')
+datafile = h5py.File('../mu/all.h5')
 
 
 
