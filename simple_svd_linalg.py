@@ -95,4 +95,4 @@ for i in range(0, len(qual_items), 1000):
 
     preding = np.einsum('ij,ji->i',R[qual_items[i:min(i+1000, len(qual_items))],:], vt[:,qual_users[i:min(i+1000, len(qual_items))]])
     for pr in preding:
-        pred.write('%.3f\n' % (pr+3)) #convert back to 1-5 ratings systems
+        pred.write('%.3f\n' % (pr+3+0.60951619727280626)) #convert back to 1-5 ratings systems
