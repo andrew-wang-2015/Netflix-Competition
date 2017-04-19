@@ -212,6 +212,7 @@ def convert_to_V(user_sm):
 
 def predict_new_rating(hidden_states, weights, visible_bias, user_id, movie_id):
   # Produce vector P_hat[j] of p(h_j = 1 | V) for each factor j
+  print ('User ID: ', user_id, 'Movie ID: ', movie_id)
   numerators = np.zeros(5)
   for rating in range(1, 6):
     P_hat = hidden_states[user_id * 5 + (rating - 1)]
@@ -245,21 +246,29 @@ if __name__ == '__main__':
   user_mat = convert_to_V(user_sparse_matrix)
 
   print (user_mat.getnnz())
+  num_nnz = user_mat.getnnz()
 
-  model = BernoulliRBM(n_components=100, learning_rate=0.02, n_iter=50, verbose=1, batch_size=1000)
+  model = BernoulliRBM(n_components=100, learning_rate=0.05, n_iter=50, verbose=1, batch_size=1000)
   model.fit(user_mat)
   print(model.components_.shape)
-  #bias_rates = # model.
   print('Weight Matrix: \n', model.components_)
   print('Visible Biases: \n', model.intercept_visible_)
   print('Hidden Biases: \n', model.intercept_hidden_)
-  #print(model.components_)
   hidden_probs = model.transform(user_mat)
   print('Hidden Units: \n', hidden_probs)
-  #print()
 
-  print ('New Rating: ', predict_new_rating(hidden_probs, model.components_, model.intercept_visible_, user_sparse_matrix.row[0], user_sparse_matrix.col[0]))
-  print ('Actual Rating: ', user_sparse_matrix.data[0])
+  # Calculate RMSE
+  sq_error = 0
+  for i in range(num_nnz):
+    new_rating = predict_new_rating(hidden_probs, model.components_, model.intercept_visible_, user_sparse_matrix.row[i], user_sparse_matrix.col[i])
+    old_rating = user_sparse_matrix.data[i]
+    print ('New Rating: ', new_rating)
+    print ('Actual Rating: ', old_rating)
+    sq_error += (new_rating - old_rating) ** 2
+  rmse = np.sqrt(sq_error / num_nnz)
+  print ('RMSE: ' , rmse)
+
+
   #r.train(user_0_mat, max_epochs = 5000)
 
   #r = RBM(num_visible = 6, num_hidden = 2)
