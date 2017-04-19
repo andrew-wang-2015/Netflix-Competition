@@ -73,7 +73,8 @@ def get_train_data_user(filename):
 
             I.append(int(userid)-1)
             J.append(int(itemid)-1)
-            V.append(float(rating)-3) #Center around 3, by setting 3 to 0
+            V.append(float(rating))
+            #V.append((float(rating)-0.5 / (5 - 0.5))) #Center around 3, by setting 3 to 0
 
     bar.finish()
 
