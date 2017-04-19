@@ -1,42 +1,71 @@
+# coding=utf8
 # Implementation of AutoRec in tf. See http://users.cecs.anu.edu.au/~u5098633/papers/www15.pdf
 # Aadith Moorthy
-import easygui
+
 import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.regularizers import l2, l1
-from get_data import import_data_to_mat_user_opt
-from keras.optimizers import Adagrad
+
+from get_data import import_data_movie
+import matplotlib.pyplot as plt
 import math
 import numpy as np
 import envoy
 import random
+import scipy.sparse
+import progressbar
 
-
-nusers = 7#458293
+nusers = 458293
 nitems = 17770
 
-batch_size = 1 # divisors of nusers: {1, 11, 61, 671, 683, 7513, 41663, 458293}
-num_epochs = 1
+batch_size = 20 # divisors of nitems: {1, 2, 5, 10, 1777, 3554, 8885, 17770}
+num_epochs = 5
 
 # hyperparameters
 latent_vars = 50
 learning_rate = 0.1
 
-trainpath = '../um/small_train.dta'
-probepath = '../um/small_train.dta'
-datatr, datapr = import_data_movie(trainpath, probepath)
+datafile = h5py.File('../mu/all.h5')
 
+users = datafile['train_user_list']
+items = datafile['train_item_list']
+
+ratings = datafile['train_rating_list']
+
+probe_users = datafile['probe_user_list']
+probe_items = datafile['probe_item_list']
+
+probe_ratings = datafile['probe_rating_list']
+
+# convert to 2d objects for convenience
+start = 0
+users_aux = []
+ratings_aux = []
+for item in range(nitems):
+    end = np.searchsorted(items, item + 1)
+    users_aux.append(users[start:end])
+
+    ratings_aux.append(ratings[start:end])
+
+users = users_aux
+ratings = ratings_aux
+
+start = 0
+probe_users_aux = []
+ratings_aux = []
+for item in range(nitems):
+    end = np.searchsorted(probe_items, item + 1)
+    probe_users_aux.append(users[start:end])
+
+    probe_ratings_aux.append(ratings[start:end])
+
+probe_users = probe_users_aux
+probe_ratings = probe_ratings_aux
+
+print "loaded all data"
 # Set seeds for random numbers to ensure reproducibility of results
-np.random_seed(11261996)
+np.random.seed(11261996)
 tf.set_random_seed(11261996)
 random.seed(11261996)
 
-# get proper testing data ready
-datats_in = []
-datats_out = []
-datats_obs = []
-for i in datapr
 
 # We create placeholders to correctly implementing the 'masking' feature
 # When training, only want to update the weights corresponding to observed param
@@ -51,26 +80,29 @@ scale = math.sqrt(6.0 / (nusers + latent_vars)) # not 100% sure why this
 # following notation from paper
 # layer 1
 V = tf.Variable(tf.random_uniform([nusers, latent_vars], -scale, scale))
-μ = tf.Variable(tf.random_uniform([latent_vars], -scale, scale))
-g = tf.nn.softmax(tf.matmul(train_data, V) + μ)
+u = tf.Variable(tf.random_uniform([latent_vars], -scale, scale))
+g = tf.nn.softmax(tf.matmul(train_data, V) + u)
 #activation here can be changed as needed
 
 # layer 2
 W = tf.Variable(tf.random_uniform([latent_vars, nusers], -scale, scale))
 b = tf.Variable(tf.random_uniform([nusers], -scale, scale))
-f = tf.matmul(train_data, W) + b #no activation because ratings are -2,-1,0,1,2
+f = tf.matmul(g, W) + b #no activation because ratings are -2,-1,0,1,2
 
 test_data = tf.placeholder(tf.float32, [None, nusers])
 test_observations = tf.placeholder(tf.float32, [None, nusers])
-root_mean_squared_error = tf.sqrt(tf.reduce_sum(tf.square((y - test_data)*test_observations)) / tf.reduce_sum(test_observations))
+squared_error_tf = tf.reduce_sum(tf.square((f - test_data)*test_observations))
+
+tf.add_to_collection('predictor', f)
+tf.add_to_collection('squared_error_calc', squared_error_tf)
+# loss is masked to only include observed
+masked_loss = tf.reduce_mean(tf.reduce_sum(tf.square((f - train_data)*train_observations), 1, keep_dims=True))
+trainStep = tf.train.RMSPropOptimizer(learning_rate).minimize(masked_loss)
 
 # start tf session and training
+saver = tf.train.Saver()
 autoRecSession = tf.InteractiveSession()
 autoRecSession.run(tf.initialize_all_variables())
-
-# loss is masked to only include observed
-masked_loss = tf.reduce_mean(tf.reduce_sum(tf.square((y - train_data)*train_observations), 1, keep_dims=True))
-trainStep = tf.train.GradientDescentOptimizer(learning_rate).minimize(masked_loss)
 
 # go through epochs
 # randomly iterating through items
@@ -78,85 +110,108 @@ trainStep = tf.train.GradientDescentOptimizer(learning_rate).minimize(masked_los
 items_list = range(nitems)
 
 print "Starting training epochs"
-for epoch in range(num_epochs):
-    print "Epoch %d of %d" % (epoch, num_epochs)
-    random.shuffle(items_list)
+probe_rmse_lst = []
+train_rmse_lst = []
+datapr_num = datapr.getnnz()
+datatr_num = datatr.getnnz()
+try:
+    for epoch in range(num_epochs):
+        print "Epoch %d of %d" % (epoch +1, num_epochs)
+        random.shuffle(items_list)
+        batch_num = int(math.ceil(nitems / float(batch_size)))
 
-    for batch in range(math.ceil(nitems / batch_size)):
-        start_idx = batch * batchSize
-        end_idx = min(start_idx + batchSize, nitems)
+        bar = progressbar.ProgressBar(maxval=batch_num, widgets=["Training: ",
+                                                                 progressbar.Bar(
+                                                                     '=', '[', ']'),
+                                                                 ' ', progressbar.Percentage(),
 
-        batch_data = []
-        batch_observations = []
-        for item_idx in range(start_idx, end_idx):
-            item = items_list[item_idx]
-            item_features = datatr.getrow(item)
+                                                                 ' ', progressbar.ETA()]).start()
+        for batch in range(batch_num):
 
-            batchData.append(item_features.toarray())
-            item_observation = np.zeros((1, nusers))
-            item_observation[item_features.indices] = 1
-            batch_observations.append(item_observation)
+            if (batch % (int(0.01*batch_num))) == 0:
+                bar.update(batch % bar.maxval)
 
-        batch_data = np.array(batch_data)
-        batch_observations = np.array(batch_observations)
+            start_idx = batch * batch_size
+            end_idx = min(start_idx + batch_size, nitems)
+            #print batch, start_idx, end_idx
+            batch_data = []
+            batch_observations = []
+            for item_idx in range(start_idx, end_idx):
+                item = items_list[item_idx]
+                item_features = np.zeros((nusers))
+                item_features[users[item]] = ratings[item]
+                batch_data.append(item_features)
+                item_observation = np.zeros(nusers)
+                item_observation[users[item]] = 1
+                batch_observations.append(item_observation)
 
-        trainStep.run(feed_dict={train_data:batch_data, train_observations:batch_observations})
+            batch_data = np.array(batch_data)
 
-    result = rmse.eval(feed_dict={train_data:allData, preData:allTestData, preMask:allTestMask})
-    print("epoch %d/%d\trmse: %.4f"%(epoch+1, epochCount, result))
+            batch_observations = np.array(batch_observations)
 
-
-
-'''
-class Adagrad_select(Adagrad):
+            trainStep.run(feed_dict={train_data:batch_data, train_observations:batch_observations})
+        bar.finish()
 
 
-    def get_updates(self, params, constraints, loss):
-        res = super(Adagrad_select, self).get_updates(params, constraints, loss)
+        # to get proper test data, read as needed
+        # do 1 batch at a time to save memory
+        probe_squared_error = 0.0
+        train_squared_error = 0.0
 
-        #print tf.Session().run(res), 'sf'
-        res[0] = tf.matmul(tf.convert_to_tensor(np.zeros((50, 17770)), dtype='float32'), res[0])
-        res[1] = tf.matmul(tf.convert_to_tensor(np.zeros((50, 17770)), dtype='float32'), res[1])
+        bar = progressbar.ProgressBar(maxval=batch_num, widgets=["Testing: ",
+                                                                 progressbar.Bar(
+                                                                     '=', '[', ']'),
+                                                                 ' ', progressbar.Percentage(),
 
-        return res
+                                                                 ' ', progressbar.ETA()]).start()
 
-def init_model():
-    model = Sequential()
+        for batch in range(batch_num):
 
-    # latent variables
-    model.add(Dense(50, activation='sigmoid', input_shape=(nitems, )))
+            if (batch % (int(0.01*batch_num))) == 0:
+                bar.update(batch % bar.maxval)
 
-    #out
-    model.add(Dense(nitems, activation='linear'))
+            start_idx = batch * batch_size
+            end_idx = min(start_idx + batch_size, nitems)
+            #print batch, start_idx, end_idx
+            datapr_all = []
+            datatr_all = []
+            datatr_observation = []
+            datapr_observation = []
+            for item_idx in range(start_idx, end_idx):
 
-    model.compile(optimizer=Adagrad_select(),
-              loss='mse')
-    return model
+                datapr_row = datapr.getrow(item_idx)
+                datapr_all.append(datapr_row.toarray().flatten())
+                datatr_row = datatr.getrow(item_idx)
+                datatr_all.append(datatr_row.toarray().flatten())
+                datapr_observation_row = np.zeros((nusers))
+                datatr_observation_row = np.zeros((nusers))
+                datapr_observation_row[datapr_row.indices] = 1
+                datapr_observation.append(datapr_observation_row)
+                datatr_observation_row[datatr_row.indices] = 1
+                datatr_observation.append(datatr_observation_row)
+            datapr_all = np.array(datapr_all)
+            datatr_all = np.array(datatr_all)
+            datatr_observation = np.array(datatr_observation)
+            datapr_observation = np.array(datapr_observation)
+            probe_squared_error += squared_error_tf.eval(feed_dict={train_data:datatr_all, test_data:datapr_all, test_observations:datapr_observation})
+            train_squared_error += squared_error_tf.eval(feed_dict={train_data:datatr_all, test_data:datatr_all, test_observations:datatr_observation})
 
-def data_generator():
-    print range(0, nusers, batch_size)
-    while True:
-        for i in range(0, nusers, batch_size):
-            data_for_batch = datatr[i:i+batch_size, :].toarray()
-            print data_for_batch, 'd'
-            yield data_for_batch, data_for_batch
+        bar.finish()
+        probe_rmse_lst.append(math.sqrt(probe_squared_error/datapr_num))
+        train_rmse_lst.append(math.sqrt(train_squared_error/datatr_num))
+        print "Finished epoch %d of %d with train rmse of %.4f and probe rmse of %.4f" % (epoch+1, num_epochs, train_rmse_lst[-1],probe_rmse_lst[-1])
+except KeyboardInterrupt:
+    print 'saving progress and closing'
 
-def probe_mse_calc(model, probepath):
-    f = open(probepath, 'r')
-    mean_squared_error = 0
-    r = envoy.run('wc -l {}'.format(probepath))
-    num_lines = int(r.std_out.strip().partition(' ')[0])
-    for line in f:
-        user, item, date, rating = line.split()
+saver.save(autoRecSession, 'AutoRec.mdl')
 
-        mean_squared_error += ((model.predict(datatr[int(user)-1].toarray())[:,int(item)-1] - (float(rating)-3))**2)/float(num_lines)
-    f.close()
-    return mean_squared_error
+f = plt.figure(1)
+# take negative to get lower bound
+plt.plot(range(1,len(probe_rmse_lst)+1), probe_rmse_lst, label='Probe_rmse')
 
-if __name__=="__main__":
+plt.xlabel('Epoch')
+plt.legend()
+plt.ylim((.5,1))
+plt.ylabel('I-AutoRec RMSE')
 
-    model = init_model()
-
-    model.fit_generator(data_generator(), samples_per_epoch=nusers, nb_epoch=nepochs)
-    print math.sqrt(probe_mse_calc(model, probepath))
-'''
+f.savefig('i_autorec_rmse.pdf')
