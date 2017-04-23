@@ -5,12 +5,45 @@ from sklearn.neural_network import BernoulliRBM
 from sklearn.preprocessing import normalize
 from sklearn import linear_model
 import numpy as np
+import envoy
+import progressbar
+import h5py
+import math
+import random
 
+h5filename = "../mu/all.h5"
+
+h5file = h5py.File(h5filename)
+
+I = h5file['train_user_list']
+J = h5file['train_item_list']
+V = h5file['train_rating_list']
+
+probe_I = h5file['probe_user_list']
+probe_J = h5file['probe_item_list']
+probe_V = h5file['probe_rating_list']
+
+
+qual_users = h5file['qual_user_list']
+qual_items = h5file['qual_item_list']
+
+#RBM_rows = h5file['train_RBM_rows_list']
+
+numUsers = 458293
+numMovies = 17770
+dataPoints = len(I)
+batch_size= 1000 # {1, 7, 31, 217, 452957, 3170699, 14041667, 98291669}
+#num_epochs = 10
+
+user_sparse_matrix = scipy.sparse.coo_matrix(
+        (V, (I, J)), shape=(numUsers, numMovies))
+
+probe_sparse_matrix = scipy.sparse.coo_matrix(
+        (probe_V, (probe_I, probe_J)), shape=(numUsers, numMovies))
 
 
 # Data is made continuous for continuous RBM
-user_sparse_matrix = get_data_progbar2.get_train_data_user('../um/small_train.dta')
-#user_sparse_normed = normalize(user_sparse_matrix, norm='l1', axis=1)
+#user_sparse_matrix = get_data_progbar2.get_train_data_user('../um/small_train.dta')
 
 class RBM:
   
@@ -202,12 +235,18 @@ def convert_to_V(user_sm):
   fin_col = orig_col
   fin_data = np.ones(num_ratings)
   #count = 0
+  print ('Converting to V: ')
+  bar = progressbar.ProgressBar(maxval=num_ratings, widgets=["Loading train ratings: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+    ' ', progressbar.ETA()]).start()
   for i, rating in np.ndenumerate(orig_data):
-    fin_row[i] = (orig_row[i]) * 5 + (rating - 1)
+    if (i[0] % 1000) == 0:
+      bar.update(i[0] % bar.max_value)
+    fin_row[i[0]] = (orig_row[i[0]]) * 5 + (rating - 1)
     #fin_col[count] = count
     # i is tuple of index in original matrix
     #movie_ids[count] = i[1]
     #count += 1
+  bar.finish()
   return scipy.sparse.coo_matrix((fin_data,(fin_row,fin_col)), shape=(user_sm.shape[0] * 5, user_sm.shape[1]))
 
 def predict_new_rating(hidden_states, weights, visible_bias, user_id, movie_id):
@@ -229,26 +268,31 @@ def predict_new_rating(hidden_states, weights, visible_bias, user_id, movie_id):
   return final_rate
 
 
-# Train RBM on User-Movie dataset
-def RBM_single_user(V):
-  # Get n_components hidden factors for each movie
-  model = BernoulliRBM(n_components=100, learning_rate=0.0002, n_iter=18, verbose=1)
-  model.fit(V)
-  print (model.components_.shape)
-  return model.components_
-
-
+# TRain RBM
 if __name__ == '__main__':
 
   # Data is made continuous for continuous RBM
-  user_sparse_matrix = get_data_progbar2.get_train_data_user('../um/small_train.dta')
+  #user_sparse_matrix = get_data_progbar2.get_train_data_user('../mu/train.dta')
+  user_sparse_matrix.data += 3.7
+  user_sparse_matrix = user_sparse_matrix.floor()
 
+  probe_sparse_matrix.data += 3.7
+  probe_sparse_matrix = probe_sparse_matrix.floor()
+  
+  print ('Converted all ratings: ')
   user_mat = convert_to_V(user_sparse_matrix)
-
+  # Load RBM binary matrix
+  '''
+  fin_data = np.ones(user_sparse_matrix.getnnz())
+  fin_row = RBM_rows
+  user_mat = scipy.sparse.coo_matrix((fin_data,(fin_row,user_sparse_matrix.col)), shape=(user_sparse_matrix.shape[0] * 5, user_sparse_matrix.shape[1]))
+'''
   print (user_mat.getnnz())
-  num_nnz = user_mat.getnnz()
+  user_num_nnz = user_mat.getnnz()
+  probe_num_nnz = len(probe_I)
 
   model = BernoulliRBM(n_components=100, learning_rate=0.05, n_iter=50, verbose=1, batch_size=1000)
+  print ('Getting Model Ready: ')
   model.fit(user_mat)
   print(model.components_.shape)
   print('Weight Matrix: \n', model.components_)
@@ -257,16 +301,32 @@ if __name__ == '__main__':
   hidden_probs = model.transform(user_mat)
   print('Hidden Units: \n', hidden_probs)
 
-  # Calculate RMSE
-  sq_error = 0
-  for i in range(num_nnz):
+  # Calculate train RMSE
+  train_sq_error = 0
+  for i in range(user_num_nnz):
     new_rating = predict_new_rating(hidden_probs, model.components_, model.intercept_visible_, user_sparse_matrix.row[i], user_sparse_matrix.col[i])
     old_rating = user_sparse_matrix.data[i]
-    print ('New Rating: ', new_rating)
-    print ('Actual Rating: ', old_rating)
-    sq_error += (new_rating - old_rating) ** 2
-  rmse = np.sqrt(sq_error / num_nnz)
-  print ('RMSE: ' , rmse)
+    #print ('New Rating: ', new_rating)
+    #print ('Actual Rating: ', old_rating)
+    train_sq_error += (new_rating - old_rating) ** 2
+  train_rmse = np.sqrt(train_sq_error / user_num_nnz)
+  print ('Train RMSE: ' , train_rmse)
+
+  # Calculate train RMSE
+  probe_sq_error = 0
+  for i in range(probe_num_nnz):
+    new_rating = predict_new_rating(hidden_probs, model.components_, model.intercept_visible_, probe_sparse_matrix.row[i], probe_sparse_matrix.col[i])
+    old_rating = probe_sparse_matrix.data[i]
+    #print ('New Rating: ', new_rating)
+    #print ('Actual Rating: ', old_rating)
+    probe_sq_error += (new_rating - old_rating) ** 2
+  probe_rmse = np.sqrt(probe_sq_error / probe_num_nnz)
+  print ('Probe RMSE: ' , probe_rmse)
+
+  pred = open('predictions.txt', 'w')
+  for i in range(len(qual_users)):
+    new_rating = predict_new_rating(hidden_probs, model.components_, model.intercept_visible_, qual_users[i], qual_items[i])
+    pred.write('%.3f\n' % (new_rating)) # Write new prediction to file
 
 
   #r.train(user_0_mat, max_epochs = 5000)
