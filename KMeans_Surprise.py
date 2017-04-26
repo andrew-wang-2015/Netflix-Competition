@@ -5,19 +5,40 @@ from surprise import evaluate
 from surprise import Reader
 from surprise import SVD
 from surprise import accuracy
-#train.dta and probe.dta in format movie, user, date, rating  
+from surprise import KNNBasic
+#train.dta and probe.dta in format user, movie, date, rating   
 
 train_file = os.path.expanduser("train.dta")
 test_file = os.path.expanduser("probe.dta")
-reader = Reader(line_format='item user timestamp rating', sep=',')
-train_data = Dataset.load_from_file(train_file, reader=reader)
-test_data = Dataset.load_from_file(test_file, reader=reader)
+reader = Reader(line_format='user item timestamp rating', sep=' ')
 
-algo = SVD()
+folds_files = [(train_file, test_file)]
+data = Dataset.load_from_folds(folds_files, reader=reader)
+print("Loaded in training and testing \n")
 
 
-algo.train(trainset)
-predictions = algo.test(testset)
+sim_options = {'name': 'pearson_baseline',
+               'user_based': True  # compute  similarities between users
+               }
+
+algo = KNNBasic(sim_options=sim_options)
+
+for trainset, testset in data.folds():
+    print ("Started training ... \n")
+    # train and test algorithm.
+    algo.train(trainset)
+    predictions = algo.test(testset)
     
-rmse = accuracy.rmse(predictions, verbose = True)
+    print("Done training...\n")
+
+    # Compute and print Root Mean Squared Error
+    rmse = accuracy.rmse(predictions, verbose=True)
+
+print(predictions)
+
+text_file = open("KMeans_SurpriseResults.txt", "w")
+text_file.write("RMSE: %s" % rmse)
+text_file.close()
+
+
 
