@@ -26,11 +26,6 @@ probe_items = datafile['probe_item_list']
 
 probe_ratings = datafile['probe_rating_list']
 
-users = np.concatenate((users, probe_users))
-
-items = np.concatenate((items, probe_items))
-
-ratings = np.concatenate((ratings, probe_ratings))
 
 
 qual_users = datafile['qual_user_list']
@@ -42,7 +37,7 @@ print 'loaded data'
 R = scipy.sparse.coo_matrix((ratings, (items, users)), shape=(nitems, nusers), dtype='f')
 
 print 'built sparse matrix'
-k = 57
+k = 59
 print k
 R, s, vt = svds(R, k)
 
@@ -57,7 +52,7 @@ print 'done inner dot'
 
 train_mse = 0.0
 probe_mse = 0.0
-'''
+
 batches = len(range(0, len(probe_ratings), 1000))
 for i in range(0, len(probe_ratings), 1000):
 
@@ -96,3 +91,4 @@ for i in range(0, len(qual_items), 1000):
     preding = np.einsum('ij,ji->i',R[qual_items[i:min(i+1000, len(qual_items))],:], vt[:,qual_users[i:min(i+1000, len(qual_items))]])
     for pr in preding:
         pred.write('%.3f\n' % (pr+3+0.60951619727280626)) #convert back to 1-5 ratings systems
+'''
