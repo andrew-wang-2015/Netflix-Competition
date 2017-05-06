@@ -62,9 +62,7 @@ def main():
     moviesRated = dict()   # Keys are users, value for each key is dictionary mapping movie to rating
     rated = dict()
     onlyUserMovie = dict()    # Keys are users, value for each key is set of movies that user has rated
-    validNeighbors = dict()
-    userRatings = dict()
-    movieRatings = dict()    
+    validNeighbors = dict()   
     Users = []
     Movies = []
     Ratings = []
@@ -77,25 +75,18 @@ def main():
                 print(user)
             movie = np.uint16(movie)
             rating = np.uint8(rating)
-            if user not in userRatings:
-                userRatings[user] = [rating] 
+            if user not in onlyUserMovie:
                 onlyUserMovie[user] = {movie}
             else:
-                userRatings[user].append(rating)
-                onlyUserMovie[user].add(movie)
-                
-            if movie not in movieRatings:
-                movieRatings[movie] =[rating]
-            else:  
-                movieRatings[movie].append(rating)        
+                onlyUserMovie[user].add(movie)     
             
-            if user != prevUser:
-                moviesRated[prevUser] = rated 
-                prevUser = user 
-                rated = dict()
+            #if user != prevUser:
+                #moviesRated[prevUser] = rated 
+                #prevUser = user 
+                #rated = dict()
                 
-            rated[movie] = rating 
-    moviesRated[prevUser] = rated 
+            #rated[movie] = rating 
+    #moviesRated[prevUser] = rated 
             
             
                 
@@ -105,17 +96,11 @@ def main():
     print("Loaded all data")
  
     
-    with open('MoviesRated.pickle', 'wb') as handle:
-        pickle.dump(moviesRated, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    #with open('MoviesRated.pickle', 'wb') as handle:
+        #pickle.dump(moviesRated, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
-    with open('OnlyUserMovie.pickle', 'wb') as handle:
-        pickle.dump(onlyUserMovie, handle, protocol=pickle.HIGHEST_PROTOCOL)    
-        
-    with open('UserRatings.pickle', 'wb') as handle:
-        pickle.dump(userRatings, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
-    with open('MovieRatings.pickle', 'wb') as handle:
-        pickle.dump(movieRatings, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    #with open('OnlyUserMovie.pickle', 'wb') as handle:
+        #pickle.dump(onlyUserMovie, handle, protocol=pickle.HIGHEST_PROTOCOL)    
         
     for i in range(1,numUsers + 1):
         validNeighbors[i] = set()
@@ -126,8 +111,14 @@ def main():
             if len(onlyUserMovie[i] & onlyUserMovie[j]) >= 0.25 * min(len(onlyUserMovie[i]), len(onlyUserMovie[j])):
                 validNeighbors[i].add(j)
                 validNeighbors[j].add(i)    
-    with open('ValidNeighbors.pickle', 'wb') as handle:
-        pickle.dump(validNeighbors, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+    noNeighbors = 0
+    for i in validNeighbors:
+        if len(validNeighbors[i]) == 0:
+            noNeighbors += 1
+    print(noNeighbors)
+            
+    #with open('ValidNeighbors.pickle', 'wb') as handle:
+        #pickle.dump(validNeighbors, handle, protocol=pickle.HIGHEST_PROTOCOL) 
     print("Generated neighbors for all users")
     Ratings = []
     predictions = []
@@ -140,7 +131,7 @@ def main():
             rating = np.uint8(rating)
             Ratings.append(rating)
             realNeighbors = pruneValidNeighbors(movie, user, validNeighbors, onlyUserMovie)
-            predictions.append(getRating(movie, user, realNeighbors, onlyUserMovie, userRatings, movieRatings, moviesRated))   
+            predictions.append(getRating(movie, user, realNeighbors, onlyUserMovie, moviesRated))   
             
     print(calculateRMSE(predictions, Ratings))
     
