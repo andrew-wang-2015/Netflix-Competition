@@ -11,13 +11,16 @@ idx_filename = "../mu/all.idx"
 dest_filename = '../mu/all_RBM.h5'
 
 r = envoy.run('wc -l {}'.format(source_filename))
-num_lines = int(r.std_out.strip().partition(' ')[0])
-bar = progressbar.ProgressBar(maxval=num_lines, widgets=["Loading train ratings: ",
+
+#num_lines = int(r.std_out.strip().partition(' ')[0])
+
+bar = progressbar.ProgressBar(maxval=102416306, widgets=["Loading train ratings: ",
                                                          progressbar.Bar(
                                                              '=', '[', ']'),
                                                          ' ', progressbar.Percentage(),
 
                                                          ' ', progressbar.ETA()]).start()
+                                                         
 I = []
 J = []
 V = []
@@ -40,7 +43,6 @@ with open(source_filename) as f:
 
           idx = int(idx_file.readline().replace("\n",""))
           if idx <= 3:
-
               I.append(int(userid)-1)
               #print I
               J.append(int(itemid)-1)
@@ -54,7 +56,7 @@ with open(source_filename) as f:
               qual_I.append(int(userid)-1)
               qual_J.append(int(itemid)-1)
 
-bar.finish()
+#bar.finish()
 print ("Finished Bar: ")
 I = np.array(I)
 print ("Finished 1: ")
