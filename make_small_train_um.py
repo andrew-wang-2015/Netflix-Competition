@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 
-idxFile  = '../um/all.idx'
-dataFile = '../um/all.dta'
+idxFile  = 'um/all.idx'
+dataFile = 'um/all.dta'
 
 indices = pd.read_csv(idxFile, delimiter=' ', header=None, nrows=1000).values
 print('Done loading all.idx - 1000')
@@ -18,5 +18,5 @@ print('Created trainData')
 df1 = pd.DataFrame(trainData)
 print('Created df1')
 
-df1.to_csv('../um/small_train.dta', index=False, sep=' ', header=False)
+df1.to_csv('um/small_train.dta', index=False, sep=' ', header=False)
 print('Created small_train.dta')

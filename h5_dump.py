@@ -21,11 +21,14 @@ bar = progressbar.ProgressBar(maxval=num_lines, widgets=["Loading train ratings:
 I = []
 J = []
 V = []
+d = []
 probe_I = []
 probe_J = []
 probe_V = []
+probe_d = []
 qual_I = []
 qual_J = []
+qual_d = []
 
 with open(source_filename) as f:
       idx_file = open(idx_filename)
@@ -44,23 +47,29 @@ with open(source_filename) as f:
               #print I
               J.append(int(itemid)-1)
               V.append(int(rating)-3-0.60951619727280626) # to get mean
+              d.append(int(date)-1)
           elif idx == 4:
               probe_I.append(int(userid)-1)
               probe_J.append(int(itemid)-1)
               probe_V.append(int(rating)-3-0.60951619727280626)
+              probe_d.append(int(date)-1)
           elif idx == 5:
               qual_I.append(int(userid)-1)
               qual_J.append(int(itemid)-1)
+              qual_d.append(int(date)-1)
 
 bar.finish()
 I = np.array(I)
 J = np.array(J)
 V = np.array(V)
+d = np.array(d)
 probe_I = np.array(probe_I)
 probe_J = np.array(probe_J)
 probe_V = np.array(probe_V)
+probe_d = np.array(probe_d)
 qual_I = np.array(qual_I)
 qual_J = np.array(qual_J)
+qual_d = np.array(qual_d)
 
 
 print "starting writes"
@@ -68,11 +77,14 @@ f = h5py.File(dest_filename, 'w')
 f.create_dataset('train_user_list', data = I)
 f.create_dataset('train_item_list', data = J)
 f.create_dataset('train_rating_list', data = V)
+f.create_dataset('train_time', data = d)
 f.create_dataset('probe_user_list', data = probe_I)
 f.create_dataset('probe_item_list', data = probe_J)
 f.create_dataset('probe_rating_list', data = probe_V)
+f.create_dataset('probe_time', data = probe_d)
 f.create_dataset('qual_user_list', data = qual_I)
 f.create_dataset('qual_item_list', data = qual_J)
+f.create_dataset('qual_time', data = qual_d)
 
 
 print 'finished single arrays'

@@ -1,1 +1,7 @@
 __pycache__/*
+*.dta 
+*.pickle
+*.ppk
+*.pem
+*.txt
+*.dta
