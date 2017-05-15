@@ -12,6 +12,7 @@ import progressbar
 import h5py
 import math
 import random
+import tensorflow as tf
 #import theano
 
 import sys
@@ -51,8 +52,11 @@ user_V_V = h5file_V['train_binary_list']
 numUsers = 458293
 numMovies = 17770
 dataPoints = len(I)
-batch_size= 1000 # {1, 7, 31, 217, 452957, 3170699, 14041667, 98291669}
+batch_size = 1000 # {1, 7, 31, 217, 452957, 3170699, 14041667, 98291669}
 #num_epochs = 10
+numFactors = 20
+
+hidden_probs_final = np.zeros((numUsers * 5, numFactors))
 
 user_sparse_matrix = scipy.sparse.coo_matrix(
         (V, (I, J)), shape=(numUsers, numMovies))
@@ -98,16 +102,20 @@ def convert_to_V(user_sm):
   f.close()
   return scipy.sparse.coo_matrix((fin_data,(fin_row,fin_col)), shape=(user_sm.shape[0] * 5, user_sm.shape[1]))
 
+'''
 def predict_new_rating(model, weights, visible_bias, user_id, movie_id):
   # Produce vector P_hat[j] of p(h_j = 1 | V) for each factor j
   #print ('User ID: ', user_id, 'Movie ID: ', movie_id)
   numerators = np.zeros(5)
   for rating in range(1, 6):
-    P_hat = model.get_hidden_probs(user_mat.getrow(user_id * 5 + (rating - 1)))
+    P_hat = model.get_hidden_probs(user_mat.getrow(user_id * 5 + (rating - 1)).todense())
+    #print(P_hat.shape)
+    #print(P_hat)
+    #P_hat = np.asarray(P_hat);
     #P_hat = hidden_states[user_id * 5 + (rating - 1)]
     numerators[rating - 1] = visible_bias[movie_id]
-    for j in range(hidden_states.shape[1]):
-      numerators[rating - 1] += P_hat[j] * weights[j][movie_id]
+    for j in range(len(P_hat)):
+      numerators[rating - 1] += P_hat[0][j] * weights[j][movie_id]
     numerators[rating - 1] = np.exp(numerators[rating - 1])
 
   denomin = np.sum(numerators)
@@ -116,6 +124,79 @@ def predict_new_rating(model, weights, visible_bias, user_id, movie_id):
     #print (numerators[i])
     final_rate += numerators[i] * (i + 1) / denomin
   return final_rate
+'''
+def populate_hidden_probs(model, weights, hidden_bias):
+  hidden_bar = progressbar.ProgressBar(maxval=numUsers, widgets=["Calculating Hidden Probs: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+        ' ', progressbar.ETA()]).start()
+  all_probs = []
+  with tf.Session() as sess:
+      for i in range(numUsers):
+          if (i % 1000) == 0:
+            hidden_bar.update(i % hidden_bar.max_value)
+          hprobs = tf.nn.sigmoid(tf.matmul(tf.cast(user_mat[i * 5: 5 * (i + 1)].todense(), tf.float32), \
+       weights + hidden_bias))
+          all_probs.append(hprobs)
+          #user_rows = hprobs.eval()
+          #hidden_probs_final[i * 5: (i + 1) * 5] = user_rows
+      all_probs = sess.run(all_probs)
+      hidden_bar.finish()
+      for j in range(len(all_probs)):
+          hidden_probs_final[j * 5: (j + 1) * 5] = all_probs[j]
+
+def do_hidden_probs_1(visible, weights, hidden_bias):
+    with tf.Session() as sess:
+        coo = visible[:(numUsers * 3)].tocoo()
+        indices = np.mat([coo.row, coo.col]).transpose()
+        visible = tf.SparseTensor(indices, coo.data, coo.shape)
+        #visible = convert_sparse_matrix_to_sparse_tensor(visible)
+        hprobs = tf.nn.sigmoid(tf.sparse_tensor_dense_matmul(tf.cast(visible, tf.float32), weights) + hidden_bias)
+        hidden_probs_final[:(numUsers * 3)] = hprobs.eval()
+        #return hprobs.eval()
+
+def do_hidden_probs_2(visible, weights, hidden_bias):
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        coo = visible[(numUsers * 3):(numUsers * 5)].tocoo()
+        indices = np.mat([coo.row, coo.col]).transpose()
+        visible = tf.SparseTensor(indices, coo.data, coo.shape)
+        #visible = convert_sparse_matrix_to_sparse_tensor(visible)
+        hprobs = tf.nn.sigmoid(tf.sparse_tensor_dense_matmul(tf.cast(visible, tf.float32), weights) + hidden_bias)
+        hidden_probs_final[(numUsers * 3): (numUsers * 5)] = hprobs.eval()
+        #return hprobs.eval()
+
+
+      #hidden_bar.finish()
+def predict_new_rating(model, weights, hidden_bias, visible_bias, user_id, movie_id):
+  # Produce vector P_hat[j] of p(h_j = 1 | V) for each factor j
+  #print ('User ID: ', user_id, 'Movie ID: ', movie_id)
+  #with tf.Session() as sess:
+    #hprobs = tf.nn.sigmoid(tf.matmul(tf.cast(visible, tf.float32), self.W) + self.bh_)
+    #P_hat = hprobs.eval()
+    numerators = np.zeros(5)
+    for rating in range(1, 6):
+      '''
+      hprobs = tf.nn.sigmoid(tf.matmul(tf.cast(user_mat.getrow(user_id * 5 + (rating - 1)).todense(), tf.float32), \
+       weights + hidden_bias))
+      '''
+      #P_hat = hprobs.eval()
+      #P_hat = model.get_hidden_probs(user_mat.getrow(user_id * 5 + (rating - 1)).todense())
+      #print(P_hat.shape)
+      #print(P_hat)
+      #P_hat = np.asarray(P_hat);
+      #P_hat = hidden_states[user_id * 5 + (rating - 1)]
+      P_hat = hidden_probs_final[user_id * 5 + (rating - 1)]
+      numerators[rating - 1] = visible_bias[movie_id]
+      for j in range(len(P_hat)):
+        numerators[rating - 1] += P_hat[j] * weights[movie_id][j]
+      numerators[rating - 1] = np.exp(numerators[rating - 1])
+
+    denomin = np.sum(numerators)
+    final_rate = 0
+    for i in range(5):
+      #print (numerators[i])
+      final_rate += (numerators[i] * (i + 1)) / denomin
+    return final_rate
+
 
 
 # TRain RBM
@@ -151,7 +232,7 @@ if __name__ == '__main__':
 
   #probe_mat = probe_mat.tocsr()
   user_mat = user_mat.tocsr()
-  user_mat = user_mat[:150]
+  #user_mat = user_mat[:150]
   #probe_mat = probe_mat[:150]
   #probe_mat = probe_mat.tocoo()
   #print (probe_mat.nnz)
@@ -162,7 +243,7 @@ if __name__ == '__main__':
   model_test.fit(probe_mat)
   '''
 
-  model = tensor_rbm.RBM(numMovies, 20, verbose=1)
+  model = tensor_rbm.RBM(numMovies, numFactors, verbose=1)
   #model = model.load_model((numMovies, 20), 1, 'models/rbm')
   print ('Getting Model Ready: ')
   model.fit(user_mat)
@@ -170,9 +251,10 @@ if __name__ == '__main__':
   model_comps = model.get_model_parameters()
   model_weights = model_comps['W']
   model_vis_bias = model_comps['bv_']
+  model_hid_bias = model_comps['bh_']
   print('Weight Matrix: \n', model_weights)
   print('Visible Biases: \n', model_vis_bias)
-  print('Hidden Biases: \n', model_comps['bh_'])
+  print('Hidden Biases: \n', model_hid_bias)
 
   #hidden_probs = model.get_hidden_probs(user_mat)
   #hidden_probs = model_comps['hidden_probs']
@@ -185,35 +267,52 @@ if __name__ == '__main__':
   model_weights = model_test.components_
   model_vis_bias = model_test.intercept_visible_
   '''
+  do_hidden_probs_1(user_mat, model_weights, model_hid_bias)
+  do_hidden_probs_2(user_mat, model_weights, model_hid_bias)
+
   # Calculate train RMSE
+  #with tf.Session() as sess:
   
   train_sq_error = 0
-  for i in range(user_num_nnz):
-    new_rating = predict_new_rating(model, model_weights, model_vis_bias, user_sparse_matrix.row[i], user_sparse_matrix.col[i])
+  predict_bar = progressbar.ProgressBar(maxval=probe_num_nnz, widgets=["Predicting Train: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+    ' ', progressbar.ETA()]).start()
+  for i in range(probe_num_nnz):
+    if (i % 1000) == 0:
+      predict_bar.update(i % predict_bar.max_value)
+    new_rating = predict_new_rating(model, model_weights, model_hid_bias, model_vis_bias, user_sparse_matrix.row[i], user_sparse_matrix.col[i])
     old_rating = user_sparse_matrix.data[i]
     #print ('New Rating: ', new_rating)
     #print ('Actual Rating: ', old_rating)
     train_sq_error += (new_rating - old_rating) ** 2
-  train_rmse = np.sqrt(train_sq_error / user_num_nnz)
+  predict_bar.finish()
+  train_rmse = np.sqrt(train_sq_error / probe_num_nnz)
   print ('Train RMSE: ' , train_rmse)
   
   # Calculate probe RMSE
   probe_sq_error = 0
+  predict_probe_bar = progressbar.ProgressBar(maxval=probe_num_nnz, widgets=["Predicting Probe: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+    ' ', progressbar.ETA()]).start()
   for i in range(probe_num_nnz): #probe_num_nnz
-    new_rating = predict_new_rating(model, model_weights, model_vis_bias, probe_sparse_matrix.row[i], probe_sparse_matrix.col[i])
+    if (i % 1000) == 0:
+        predict_probe_bar.update(i % predict_probe_bar.max_value)
+    new_rating = predict_new_rating(model, model_weights, model_hid_bias, model_vis_bias, probe_sparse_matrix.row[i], probe_sparse_matrix.col[i])
     old_rating = probe_sparse_matrix.data[i]
     #print ('New Rating: ', new_rating)
     #print ('Actual Rating: ', old_rating)
     probe_sq_error += (new_rating - old_rating) ** 2
+  predict_probe_bar.finish()
   probe_rmse = np.sqrt(probe_sq_error / probe_num_nnz)
   print ('Probe RMSE: ' , probe_rmse)
 
-  
+  predict_qual_bar = progressbar.ProgressBar(maxval=len(qual_users), widgets=["Predicting Qual: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+    ' ', progressbar.ETA()]).start()
   pred = open('predictions.txt', 'w')
   for i in range(len(qual_users)):
-    new_rating = predict_new_rating(model, model_weights, model_vis_bias, qual_users[i], qual_items[i])
+    if (i % 1000) == 0:
+        predict_qual_bar.update(i % predict_qual_bar.max_value)
+    new_rating = predict_new_rating(model, model_weights, model_hid_bias, model_vis_bias, qual_users[i], qual_items[i])
     pred.write('%.3f\n' % (new_rating)) # Write new prediction to file
-  
+  predict_qual_bar.finish()
 
   #r.train(user_0_mat, max_epochs = 5000)
 

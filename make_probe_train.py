@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-idxFile  = 'um/all.idx'
-dataFile = 'um/all.dta'
+idxFile  = '../um/all.idx'
+dataFile = '../um/all.dta'
 
 def main():
 	indices = pd.read_csv(idxFile, delimiter=' ', header=None).values
@@ -25,9 +25,9 @@ def main():
 	df2 = pd.DataFrame(probeData)
 	print('Created df2')
 
-	df1.to_csv('train.dta', sep=' ', index=False, header=False)
+	df1.to_csv('../um/train.dta', sep=' ', index=False, header=False)
 	print('Created train.dta')
-	df2.to_csv('probe.dta', sep=' ', index=False, header=False)
+	df2.to_csv('../um/probe.dta', sep=' ', index=False, header=False)
 	print('Created probe.dta')
 
 if __name__ == '__main__':
