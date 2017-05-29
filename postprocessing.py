@@ -9,81 +9,144 @@ h5file = h5py.File('../mu/all.h5')
 #datafile_alt = h5py.File('../mu/all_baselined.h5')
 h5file_all = h5py.File('../mu/all_postprocess.h5')
 
+h5file_new = h5py.File('../mu/svd_resids903.h5')
+for key in h5file_new.keys():
+	print (key)
+	print (h5file_new[key].shape)
+	print (h5file_new[key][0])
+	print (h5file_new[key][0])
+
+u_pred_probe = h5file_new['probe_predictions'][:]
+#probe_resids = h5file_new['probe_rating_list'][:]
+
+h5file_rbm_yes_probe = h5py.File('../mu/rbm_all.h5')
+
+rbm_all_pred_yes_probe = h5file_rbm_yes_probe['train_predictions'][:]
+
+h5file_rbm_on_train = h5py.File('../mu/rbm_all_on_train.h5')
+
+rbm_all_pred_on_train = h5file_rbm_on_train['train_predictions'][:]
+
+
 
 nusers = 458293
 nitems = 17770
+
+
+I = h5file['train_user_list'][:]
+J = h5file['train_item_list'][:]
+V = h5file['train_rating_list'][:]
+
+probe_I = h5file['probe_user_list'][:]
+probe_J = h5file['probe_item_list'][:]
+#probe_V = h5file['probe_rating_list'][:]
+
+V += 3.60951619727280626
+#probe_V += 3.60951619727280626
 '''
-I = h5file['train_user_list']
-J = h5file['train_item_list']
-V = h5file['train_rating_list']
-
-probe_I = h5file['probe_user_list']
-probe_J = h5file['probe_item_list']
-probe_V = h5file['probe_rating_list']
+print (V[0])
+print ('rating - residual: ', probe_V[0] - probe_resids[0], ', new rating: ', probe_predictions[0])
+print ('rating - residual: ', probe_V[1] - probe_resids[1], ', new rating: ', probe_predictions[1])
 '''
-all_I = h5file_all['all_user_list']
-all_J = h5file_all['all_item_list']
-all_V = h5file_all['all_rating_list']
-
-
-qual_I = h5file['qual_user_list']
-qual_J = h5file['qual_item_list']
-
-
-#movie_avg = datafile_alt['train_item_avg'][:]
-print ('Setting up Dictionaries')
-bar = progressbar.ProgressBar(maxval=len(all_I), widgets=["Setting up Dictionaries: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
-    ' ', progressbar.ETA()]).start()
-users_rated = np.zeros(nusers)
-
-for user in range(nusers):
-	users_rated[user] = 0
-
-for i, user in np.ndenumerate(all_I):
-	if (i[0] % 1000) == 0:
-		bar.update(i[0] % bar.max_value)
-	users_rated[user] = 1
-bar.finish()
 '''
-for user in probe_I:
-	users_rated[user] = 1
+all_I = h5file_all['all_user_list'][:]
+all_J = h5file_all['all_item_list'][:]
+all_V = h5file_all['all_rating_list'][:]
 '''
+train_predictions = V - h5file_new['train_rating_list'][:]
+
+del V
+
+print (train_predictions[0])
+train_predictions = train_predictions * 0.98 + 0.01 * rbm_all_pred_yes_probe + 0.01 * rbm_all_pred_on_train
+print (train_predictions[0])
+#qual_I = h5file['qual_user_list'][:]
+#qual_J = h5file['qual_item_list'][:]
+
 print ('Done setting up dictionaries')
 
-u_pred = np.loadtxt('../predictions.txt')
-
 print ('Loaded in predictions')
-'''
 
-bar = progressbar.ProgressBar(maxval=len(all_I), widgets=["Setting up Dictionaries: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
+# Combining Probe and Train Predictions
+'''
+total_len = len(probe_I) + len(I)
+bar = progressbar.ProgressBar(maxval=total_len, widgets=["Getting probe and train predictions: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
     ' ', progressbar.ETA()]).start()
 
-all_I = np.zeros(len(probe_I) + len(I))
-all_J = np.zeros(len(probe_J) + len(J))
-all_V = np.zeros(len(probe_V) + len(V))
+pred_I = np.empty(total_len)
+pred_J = np.empty(total_len)
+pred_V = np.empty(total_len)
 
 length_I = len(I)
 
-for i in range(len(probe_I) + len(I)):
+for i in range(total_len):
 	if (i % 1000) == 0:
 		bar.update(i % bar.max_value)
 	if i < length_I:
-		all_I[i] = I[i]
-		all_J[i] = J[i]
-		all_V[i] = V[i]
+		pred_I[i] = I[i]
+		pred_J[i] = J[i]
+		pred_V[i] = train_predictions[i]
 	else:
-		all_I[i] = probe_I[i - length_I]
-		all_J[i] = probe_J[i - length_I]
-		all_V[i] = probe_V[i - length_I]
+		pred_I[i] = probe_I[i - length_I]
+		pred_J[i] = probe_J[i - length_I]
+		pred_V[i] = u_pred_probe[i - length_I]
 bar.finish()
-print('Created all data array')
 '''
-Pred_R_m = csr_matrix((u_pred, (qual_J, qual_I)), shape=(nitems, nusers))
+print('Created pred data array')
+
+del train_predictions
+del I
+del J
+del probe_I
+del probe_J
+del u_pred_probe
+
+print ('Done with deletes')
+#Pred_R_m = csr_matrix((u_pred, (qual_J, qual_I)), shape=(nitems, nusers))
+'''
+Pred_R_m = csr_matrix((pred_V, (pred_J, pred_I)), shape=(nitems, nusers))
 print ('Made Prediction CSR matrix')
 R_m = csr_matrix((all_V, (all_J, all_I)), shape=(nitems, nusers))
 print ('Made Train CSR matrix')
+'''
 
+pred_I = np.empty(total_len)
+pred_J = np.empty(total_len)
+pred_V = np.empty(total_len)
 
+Pred_R_u = csr_matrix((pred_V, (pred_I, pred_J)), shape=(nusers, nitems))
+print ('Made Prediction CSR matrix')
+
+#del pred_I
+#del pred_J
+#del pred_V
+pred_user_avg = np.zeros(nusers)
+batch_size = 10000
+for i in range(0, nusers, batch_size):
+    users_current = Pred_R_u[i:min(i+batch_size, nusers), :]
+    batch_avg = ((users_current.sum(axis =1).flatten())/users_current.getnnz(axis =1))
+    pred_user_avg[i:min(i+batch_size, nusers)] = batch_avg
+
+del pred_I
+del pred_J
+del pred_V
+del Pred_R_u
+print ('Deleted references to prediction CSR')
+
+all_I = h5file_all['all_user_list'][:]
+all_J = h5file_all['all_item_list'][:]
+all_V = h5file_all['all_rating_list'][:]
+
+R_u = csr_matrix((all_V,(all_I,all_J)), shape=(nusers, nitems))
+print ('Made Train CSR matrix')
+
+user_avg = np.zeros(nusers)
+batch_size = 10000
+for i in range(0, nusers, batch_size):
+    users_current = R_u[i:min(i+batch_size, nusers), :]
+    batch_avg = ((users_current.sum(axis =1).flatten())/users_current.getnnz(axis =1))
+    user_avg[i:min(i+batch_size, nusers)] = batch_avg
+'''
 # Predicted Movie Averahe
 pred_movie_avg = np.zeros(nitems)
 batch_size = 10000
@@ -104,7 +167,14 @@ for i in range(0, nitems, batch_size):
 
 print ('compiled train averages')
 print ("MADE IT!")
+'''
+qual_I = h5file['qual_user_list'][:]
+qual_J = h5file['qual_item_list'][:]
 
+u_pred_qual = np.loadtxt('../mu/svd_preds903.txt')
+#u_pred_probe = np.loadtxt('probe_predictions.txt')
+
+print ('Loaded in predictions')
 numQual = len(qual_I)
 
 new_pred = np.zeros(numQual)
@@ -112,41 +182,40 @@ bar = progressbar.ProgressBar(maxval=numQual, widgets=["Changing Predictions: ",
     ' ', progressbar.ETA()]).start()
 
 #fin_pred = open('final_predictions.txt', 'w')
-for i, pred in np.ndenumerate(u_pred):
+for i, pred in np.ndenumerate(u_pred_qual):
 	if (i[0] % 1000) == 0:
 		bar.update(i[0] % bar.max_value)
 	curr_pred = pred
 	user = qual_I[i]
 	movie = qual_J[i]
 	#print(user)
+	'''
 	if users_rated[user] == 0:
 		print ("No ratings for this user: ", user)
 		curr_pred = movie_avg[movie]
+	'''
 	if curr_pred > 5:
 		curr_pred = 5
 	if curr_pred < 1:
 		curr_pred = 1
-	curr_pred += movie_avg[movie] - pred_movie_avg[movie]
+	#curr_pred += movie_avg[movie] - pred_movie_avg[movie]
+	curr_pred += user_avg[user] - pred_user_avg[user]
+	'''
 	decimal = curr_pred - int(curr_pred)
 	if decimal <= 0.1:
 		curr_pred = int(curr_pred)
 	if decimal >= 0.9:
 		curr_pred = int(curr_pred) + 1
+	'''
 	new_pred[i] = curr_pred
 	#pred.write('%.3f\n' % curr_pred)
 bar.finish()
 
-np.savetxt('final_predictions.txt', new_pred, fmt='%.3f')
-'''
-fin_pred = open('final_predictions.txt', 'w')
+np.savetxt('postprocessed_predictions_qual_user.txt', new_pred, fmt='%.3f')
 
-bar = progressbar.ProgressBar(maxval=numQual, widgets=["Writing Predictions: ", progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), \
-    ' ', progressbar.ETA()]).start()
 
-for i, pr in np.ndenumerate(new_pred):
-	if (i[0] % 1000) == 0:
-		bar.update(i[0] % bar.max_value)
-	pred.write('%.3f\n' % float(pr))
+dest_filename = '../mu/qual_postprocess_user.h5'
 
-bar.finish()
-'''
+f = h5py.File(dest_filename, 'w')
+f.create_dataset('qual_predictions', data = new_pred)
+f.close()
